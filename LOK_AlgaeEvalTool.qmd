@@ -1,0 +1,379 @@
+---
+title: "Lake Okeechobee Algae Condition Evaluation"
+# format: html
+format: 
+  html:
+    page-layout: custom
+server: shiny
+editor_options:
+  chunk_output_type: console
+---
+
+# Introduction
+
+This interactive tool provides an intereactive tool to evaluate model predctions presented by Julian et al. (*In Prep*). In this application, three modeling approaches are presented.
+
+  1. Models originally developed my Walker (2020) as part of the Lake Okeechobee System Operating Manual (LOSOM) planning effort.
+  2. Linear mixed models presented in Julian et al. (_In Prep_)
+  3. Lake Okeechobee Hydrodynamic and Biogeochemical chlorophyll hierarchal additive zonal model (LOK HABAM) presented in Julian et al. (_In Prep_)
+
+The linear mixed models (#2 above) and LOK HABAM (#3 above) were fit using Generalize Additive Models (GAMs) therefore sharing a simple equation for future use in other code/object-oriented programs or spreadsheet-based platforms is not feasible. Therefore this application was developed to extend the functionality of the models presented here.
+
+```{r, include=F}
+#| context: setup
+
+library(AnalystHelper)
+library(plyr)
+library(reshape2)
+
+library(mgcv)
+
+library(ggplot2)
+library(cowplot)
+# library(gridExtra)
+theme_set(theme_minimal(base_size = 16)+
+            theme_bw()+
+            theme(panel.border = element_rect("black",fill=NA,linewidth=1)))
+
+
+#Folder.Maker(paths);#One and done. Creates folders in working directory.
+data.path <- "./Data/"
+
+# Data --------------------------------------------------------------------
+alt.vals <- c("NA25f","PA25","PA_FWOLL","LCR1")
+alt.vals.f <- factor(alt.vals,levels = alt.vals)
+alt.cols  <- adjustcolor(c("black","indianred1","grey50","dodgerblue1"),0.5)
+## RSM Data ----------------------------------------------------------------
+RSM.data <-read.csv(paste0(data.path,"RSM_data.csv"))
+
+## For HGAM Models
+RSM.sum.Q.vol <- RSM.data
+eco.region.ls <- c("Littoral_North", "Littoral_South", "Littoral_West", "nearshore", "pelagic")
+RSM.sum.Q.vol <- lapply(eco.region.ls,function(var){
+  RSM.sum.Q.vol$EcoZone3.f <- var
+  RSM.sum.Q.vol
+})
+# head(RSM.sum.Q.vol)
+RSM.sum.Q.vol <- do.call(rbind,RSM.sum.Q.vol)
+RSM.sum.Q.vol$EcoZone3.f <- as.factor(RSM.sum.Q.vol$EcoZone3.f)
+RSM.sum.Q.vol$Alt <- factor(RSM.sum.Q.vol$Alt,levels=c("NA25f","PA25","PA_FWOLL","LCR1"))
+
+exp.dat <- expand.grid(
+  WY = unique(RSM.data$WY),
+  Alt = unique(RSM.data$Alt),
+  EcoZone3.f = as.factor(c("Littoral_North", "Littoral_South", "Littoral_West", "nearshore", "pelagic"))
+)
+LOK.RSM.stg.sea.su  <- merge(RSM.data,exp.dat,c("WY","Alt")) 
+# RSM.sum.Q.vol$Alt_plot <- with(RSM.sum.Q.vol,ifelse(Alt=="PA_FWOLL",'FWOLL',as.character(Alt)))
+# RSM.sum.Q.vol$Alt_plot <- factor(RSM.sum.Q.vol$Alt_plot,levels=c("NA25f","PA25","FWOLL","LCR1"))
+## Models -------------------------------------------------------------------
+model.files <- list.files(data.path,full.names = T,pattern="\\.Rdata$")
+
+invisible(lapply(model.files, load, envir = .GlobalEnv))
+
+## Walker (as reported in Walker 2020)
+## based on spreadsheet model (.../AlgalBloomMetric-Walker/LOSOM_Chlorophyll_Models_www_06-25-2020_www.xlsm)
+logit.ww=function(val,min.freq=1){
+  log((val+min.freq)/(100-val+min.freq))
+}
+inv_logit.ww <- function(logit_val, min.freq=1) {
+  exp_val <- exp(logit_val)
+  (100 * exp_val + min.freq * (exp_val - 1)) / (1 + exp_val)
+}
+
+
+LOK.RSM.Walker <- rbind(
+  cbind(RSM.data[,c("WY","Alt")],data.frame(EcoZone = "Pelagic", 
+                                          Chla = exp(2.954+RSM.data$mean.delta.min*0.116),
+                                          logit.f20 = (-0.557+RSM.data$mean.delta.min*0.153),
+                                          logit.f40 = (-2.270+RSM.data$mean.delta.min*0.291))),
+  cbind(RSM.data[,c("WY","Alt")],data.frame(EcoZone = "Littoral_South", 
+                                          Chla = exp(1.708+RSM.data$mean.delta.min*0.570),
+                                          logit.f20 = (-3.410+RSM.data$mean.delta.min*1.348),
+                                          logit.f40 = (-4.059+RSM.data$mean.delta.min*1.044))),
+  cbind(RSM.data[,c("WY","Alt")],data.frame(EcoZone = "Littoral_West", 
+                                          Chla = exp(1.761+RSM.data$mean.delta.min*0.716),
+                                          logit.f20 = (-3.417+RSM.data$mean.delta.min*2.160),
+                                          logit.f40 = (-4.108+RSM.data$mean.delta.min*1.412)))
+)|>
+  mutate(
+    f20 = inv_logit.ww(logit.f20),
+    f40 = inv_logit.ww(logit.f40),
+    Alt = factor(Alt, levels= c("NA25f", "PA25", "PA_FWOLL", "LCR1")),
+    EcoZone.f = factor(EcoZone,levels = c("Littoral_South", "Littoral_West","Pelagic"))
+  )
+vars <- c("WY","Alt","EcoZone.f","Chla","f20","f40")
+LOK.RSM.Walker.melt <- melt(LOK.RSM.Walker[,vars],id.vars =vars[1:3])
+
+## LMM predictions
+LOK.RSM.LMM  <- LOK.RSM.stg.sea.su|>
+  mutate(
+    Chla = predict(mod_site.seamean1.stg,newdata = LOK.RSM.stg.sea.su,type="response"),
+    f20  = predict(mod_site.sea.f20,newdata = LOK.RSM.stg.sea.su,type="response"),
+    f40  = predict(mod_site.sea.f40,newdata = LOK.RSM.stg.sea.su,type="response"),
+    Chla.fxf = predict(mod_site.seamean1.stg,newdata = LOK.RSM.stg.sea.su,type="response",
+                           exclude=c("s(EcoZone3.f)", "s(EcoZone3.f,mean.delta.min)")),
+    f20.fxf = predict(mod_site.sea.f20,newdata = LOK.RSM.stg.sea.su,type="response",
+                      exclude=c("s(EcoZone3.f)", "s(EcoZone3.f,mean.delta.min)")),
+    f40.fxf = predict(mod_site.sea.f40,newdata = LOK.RSM.stg.sea.su,type="response",
+                      exclude=c("s(EcoZone3.f)", "s(EcoZone3.f,mean.delta.min)")),
+    Alt = factor(Alt, levels= c("NA25f", "PA25", "PA_FWOLL", "LCR1")) 
+  )
+
+vars <- c("WY","Alt","EcoZone3.f","Chla","f20","f40","Chla.fxf","f20.fxf","f40.fxf")
+LOK.RSM.LMM.melt <- melt(LOK.RSM.LMM[,vars],id.vars =vars[1:3])
+LMM.params <- data.frame(param = sapply(strsplit(as.character(LOK.RSM.LMM.melt$variable),"\\."),"[",1),
+                         type = sapply(strsplit(as.character(LOK.RSM.LMM.melt$variable),"\\."),"[",2))
+LMM.params$type <- with(LMM.params,ifelse(is.na(type),"ran.eff","fix.eff"))
+LOK.RSM.LMM.melt <- cbind(LOK.RSM.LMM.melt,LMM.params)
+
+## HABAM predictions
+LOK.RSM.HABAM <- RSM.sum.Q.vol
+LOK.RSM.HABAM$TP <- predict(TP_HGAM_mod_sum2,newdata=LOK.RSM.HABAM,type="response",se.fit=T)$fit|>as.numeric()
+LOK.RSM.HABAM$DIN <- predict(DIN_HGAM_mod_sum2,newdata=LOK.RSM.HABAM,type="response",se.fit=T)$fit|>as.numeric()
+LOK.RSM.HABAM$Chla <- predict(Chla_HGAM_mod_sum3,newdata=LOK.RSM.HABAM,type="response",se.fit=T)$fit|>as.numeric()
+
+vars <- c("WY","Alt","EcoZone3.f","Chla","TP","DIN")
+LOK.RSM.HABAM.melt<- melt(LOK.RSM.HABAM[,vars],id.vars =vars[1:3])
+
+
+```
+
+## LOSOM and LOCAR 
+
+This interactive section allows the user to explore the existing predictions of existing models (explained above) for the water management and restoration scenarios presented in Julian et al. (_In Prep_). 
+<br>
+
+```{r}
+#| panel: sidebar
+mod.params <- rbind(
+  data.frame(model = "LMM",params =c("Chla","f20","f40")),
+  data.frame(model = "LOK HABAM",params =c("Chla","TP","DIN"))
+)
+
+# selectInput("Alt",
+#             label="Choose Alternative:",
+#             choices=alt.vals,
+#             multiple = TRUE,
+#             selectize = TRUE)
+checkboxGroupInput("Alt","Choose Alternative:",
+             choiceNames = alt.vals,
+             choiceValues = alt.vals,
+             inline=T)
+
+radioButtons("Model","Choose Model:",
+             choiceNames = c("Walker (2020)", "LMM","LOK HABAM"),
+             choiceValues = c("Walker","LMM","HABAM"),
+             inline = T)
+# br()
+# selectInput("Model",
+#             label="Choose Model:",
+#             choices=c("LMM","LOK HABAM"),
+#             multiple = FALSE,
+#             selectize = TRUE)
+# br()
+# checkboxGroupInput("param", "Parameter:",
+#                    c("Chlorophyll-a" = "Chla",
+#                      "Bloom Frequency (20 \u03BCg L\207B\u00B9)" = "f20",
+#                      "Bloom Frequency (40 \u03BCg/L)" = "f40",
+#                      "Total Phosphorus" = "TP",
+#                      "Dissolved Inorganic Nitrogen" = "DIN"))
+#br() 
+params <- data.frame(
+  param.names = c("Chlorophyll-a","Bloom Frequency (20 \u03BCg L\u207B\u00B9)",
+                 "Bloom Frequency (40 \u03BCg L\u207B\u00B9)","Total Phosphorus",
+                 "Dissolved Inorganic Nitrogen"),
+  param.vals = c("Chla","f20","f40","TP","DIN")
+)
+params$param.vals.f <- factor(params$param.vals,levels = c("Chla","f20","f40","TP","DIN"))
+radioButtons("param","Parameter:",
+             choiceNames = params$param.names,
+             choiceValues = params$param.vals)
+
+radioButtons("sumstat","Summary Statistic:",
+             choiceNames = c("Mean","Median","Min","Max","St.Dev"),
+             choiceValues = c("mean","median","min","max","sd"),
+             inline=T)
+br()
+(shiny::downloadButton("downloadData","Download"))
+
+```
+
+::: {.panel-tabset}
+### Plots
+```{r boxplot}
+
+plotOutput("distPlot",height="800px",width="75%")
+```
+
+### Data Table
+```{r}
+tableOutput('data')
+```
+
+
+:::
+
+## Input data
+
+Here is where you can input your own data as long as the input files has the following columns...
+
+```{r}
+fileInput("file1", "Choose CSV File", accept = ".csv")
+
+```
+
+_WORK IN PROGRESS_
+
+***
+
+<br>
+
+```{r}
+#| context: server
+
+# input <- data.frame(Alt=alt.vals)#c("NA25f","LCR1"))
+# input$param <- "Chla"
+dataset <- reactive({
+  if(input$Model=="Walker"){
+    subset(LOK.RSM.Walker.melt,Alt%in%input$Alt&variable==input$param)
+  } else if(input$Model=="LMM"){
+      subset(LOK.RSM.LMM.melt,Alt%in%input$Alt&param==input$param)
+  }else if(input$Model=="HABAM"){
+      subset(LOK.RSM.HABAM.melt,Alt%in%input$Alt&variable==input$param)
+    }
+})
+
+output$distPlot <- renderPlot({
+  params <- data.frame(
+    param.names = c("Chlorophyll-a","Bloom Frequency (20 \u03BCg L\u207B\u00B9)",
+                    "Bloom Frequency (40 \u03BCg L\u207B\u00B9)","Total Phosphorus",
+                    "Dissolved Inorganic Nitrogen"),
+    param.vals = c("Chla","f20","f40","TP","DIN")
+  )
+  params$param.vals.f <- factor(params$param.vals,levels = c("Chla","f20","f40","TP","DIN"))
+  
+  labs <- c(expression("Chl-a ("*mu*"g L"^" -1"*")"),
+            expression("f20 (>20 "*mu*"g L"^" -1"*")"),
+            expression("f40 (>40 "*mu*"g L"^" -1"*")"),
+            expression("Total Phosphorus (mg L"^" -1"*")"),
+            expression("Dissolved Inorganic Nitrogen (mg L"^" -1"*")"))
+  
+  
+  alt.cols.s <- alt.cols[alt.vals.f[alt.vals%in%input$Alt]]
+  
+  if(input$Model=="Walker"){
+    # dat <- subset(LOK.RSM.Walker.melt,Alt%in%input$Alt&variable==input$param)
+    dat <- dataset();# 
+    
+    lab.val <- labs[params$param.vals.f%in%input$param]
+    
+    p1.ww <- ggplot(dat,aes(x=Alt,y=value,fill=Alt))+
+      geom_boxplot(outliers=F)+
+      labs(title = "",
+           subtitle = "Summer Mean Values",
+           y = as.expression(lab.val),
+           x = "Alternative")+
+      facet_wrap(~EcoZone.f,ncol=3)+
+      scale_fill_manual(values = alt.cols.s)
+    p2.ww <- ggplot(dat,aes(x=WY,y=value,color=Alt))+
+      geom_line(linewidth=1)+
+      facet_wrap(~Alt+EcoZone.f,ncol=3)+
+      scale_color_manual(values = alt.cols.s)+
+      labs(title = "",
+           subtitle = "Summer Mean Values",
+           y = as.expression(lab.val),
+           x = "Water Year")
+    
+    plot_grid(p1.ww,p2.ww,ncol=1,nrow=2,rel_heights = c(1.5,1.5))
+  } else if(input$Model=="LMM"){
+    dat <- dataset() # subset(dataset(),Alt%in%input$Alt&param==input$param)
+    dat.fixed <- aggregate(value~WY+Alt,subset(dat,type=="fix.eff"),mean)|>
+      mutate(EcoZone3.f = "Entire Lake")
+    
+    lab.val <- labs[params$param.vals.f%in%input$param]
+    
+    p1 <- ggplot(dat.fixed,aes(x=Alt,y=value))+
+      geom_boxplot(outliers=F,fill=alt.cols.s)+
+      labs(title = "Fixed Model Effect Prediction",
+           subtitle = "Summer Mean Values",
+           y = as.expression(lab.val),
+           x = "Alternative")
+    p2 <- ggplot(subset(dat,type=="ran.eff"),aes(x=WY,y=value,color=Alt))+
+      geom_line(linewidth=1)+
+      facet_wrap(~Alt+EcoZone3.f,ncol=5)+
+      scale_color_manual(values = alt.cols.s)+
+      labs(title = "Random Effect Prediction",
+           subtitle = "Summer Mean Values",
+           y = as.expression(lab.val),
+           x = "Water Year")
+    
+    plot_grid(p1,p2,ncol=1,nrow=2,rel_heights = c(0.75,1.5))
+  } else if(input$Model=="HABAM"){
+    # dat <- subset(LOK.RSM.HABAM.melt,Alt%in%input$Alt&variable==input$param)
+    dat <- dataset() 
+    
+    lab.val <- labs[params$param.vals.f%in%input$param]
+    
+    p1.HABAM <- ggplot(dat,aes(x=Alt,y=value,fill=Alt))+
+      geom_boxplot(outliers=F)+
+      labs(title = "",
+           subtitle = "Summer Mean Values",
+           y = as.expression(lab.val),
+           x = "Alternative")+
+      facet_wrap(~EcoZone3.f,ncol=5)+
+      scale_fill_manual(values = alt.cols.s)
+    p2.HABAM <- ggplot(dat,aes(x=WY,y=value,color=Alt))+
+      geom_line(linewidth=1)+
+      facet_wrap(~Alt+EcoZone3.f,ncol=5)+
+      scale_color_manual(values = alt.cols.s)+
+      labs(title = "",
+           subtitle = "Summer Mean Values",
+           y = as.expression(lab.val),
+           x = "Water Year")
+    
+    plot_grid(p1.HABAM,p2.HABAM,ncol=1,nrow=2,rel_heights = c(1.5,1.5))
+  }
+  
+})
+
+output$data <- renderTable({
+  if(input$Model=="Walker"){
+    dat <- dataset()
+    xtab <- dcast(dat,EcoZone.f~Alt,value.var="value",match.fun(input$sumstat),na.rm=T)
+    xtab <- rename(xtab,c("EcoZone.f" = "EcoZone"))
+  } else if(input$Model=="LMM"){
+    dat <- dataset() # subset(dataset(),Alt%in%input$Alt&param==input$param)
+    dat$model <- "LMM"
+    dat.fixed <- aggregate(value~WY+Alt,subset(dat,type=="fix.eff"),mean)|>
+      mutate(EcoZone3.f = "Entire Lake")
+    
+    xtab <- dcast(subset(dat,type=="ran.eff"),EcoZone3.f~Alt,value.var="value",match.fun(input$sumstat),na.rm=T)|>
+      rbind(
+        dcast(dat.fixed,EcoZone3.f~Alt,value.var="value",match.fun(input$sumstat),na.rm=T)
+      )
+    xtab <- rename(xtab,c("EcoZone3.f" = "EcoZone"))
+    
+  }else if(input$Model=="HABAM"){
+    dat <- dataset()
+    xtab <- dcast(dat,EcoZone3.f~Alt,value.var="value",match.fun(input$sumstat),na.rm=T)
+    xtab <- rename(xtab,c("EcoZone3.f" = "EcoZone"))
+  }
+}, 
+digits=2,
+caption = "Period of simulation summary based on selected summary statistic (above) for each alternative selected and ecological zone.",
+caption.placement = "top"
+)
+
+
+output$downloadData <- downloadHandler(
+    filename = function() {
+      paste(format(Sys.Date(),"%Y%m%d"),"PredictionData",input$Model,  ".csv", sep="_")
+    },
+    content = function(file) {
+      write.csv(dat, file,row.names = F)
+    }
+  )
+```
+
+
