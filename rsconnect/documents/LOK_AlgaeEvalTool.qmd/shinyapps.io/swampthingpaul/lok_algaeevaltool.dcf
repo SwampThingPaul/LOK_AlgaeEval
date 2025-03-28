@@ -1,0 +1,13 @@
+name: lok_algaeevaltool
+title:
+username: swampthingpaul
+account: swampthingpaul
+server: shinyapps.io
+hostUrl: https://api.shinyapps.io/v1
+appId: 14127156
+bundleId: 10019271
+url: https://swampthingpaul.shinyapps.io/lok_algaeevaltool/
+version: 1
+quarto_version: 1.3.450
+quarto_engines: knitr
+serverRender: FALSE

@@ -3,26 +3,18 @@ title: "Lake Okeechobee Algae Condition Evaluation"
 # format: html
 format: 
   html:
-    page-layout: custom
+    page-layout: full
+    code-tools:
+      source: https://github.com/SwampThingPaul/LOK_AlgaeEval/LOK_AlgaeEvalTool.qmd
 server: shiny
 editor_options:
   chunk_output_type: console
 ---
 
-# Introduction
-
-This interactive tool provides an intereactive tool to evaluate model predctions presented by Julian et al. (*In Prep*). In this application, three modeling approaches are presented.
-
-  1. Models originally developed my Walker (2020) as part of the Lake Okeechobee System Operating Manual (LOSOM) planning effort.
-  2. Linear mixed models presented in Julian et al. (_In Prep_)
-  3. Lake Okeechobee Hydrodynamic and Biogeochemical chlorophyll hierarchal additive zonal model (LOK HABAM) presented in Julian et al. (_In Prep_)
-
-The linear mixed models (#2 above) and LOK HABAM (#3 above) were fit using Generalize Additive Models (GAMs) therefore sharing a simple equation for future use in other code/object-oriented programs or spreadsheet-based platforms is not feasible. Therefore this application was developed to extend the functionality of the models presented here.
-
 ```{r, include=F}
 #| context: setup
 
-library(AnalystHelper)
+# library(AnalystHelper)
 library(plyr)
 library(reshape2)
 
@@ -35,9 +27,16 @@ theme_set(theme_minimal(base_size = 16)+
             theme_bw()+
             theme(panel.border = element_rect("black",fill=NA,linewidth=1)))
 
+library(flextable)
 
 #Folder.Maker(paths);#One and done. Creates folders in working directory.
 data.path <- "./Data/"
+
+## function 
+sentence_case_multiple <- function(text) {
+  text <- tolower(text) # Convert all to lowercase
+  gsub("(^|(?<=[.!?]\\s))(\\p{L})", "\\U\\2", text, perl = TRUE) # Capitalize first letter after punctuation
+}
 
 # Data --------------------------------------------------------------------
 alt.vals <- c("NA25f","PA25","PA_FWOLL","LCR1")
@@ -139,6 +138,103 @@ LOK.RSM.HABAM.melt<- melt(LOK.RSM.HABAM[,vars],id.vars =vars[1:3])
 
 ```
 
+
+```{r walkers eq}
+walkerEq2020 <- rbind(
+  data.frame(
+    region.val = "Pelagic",
+    SubRegion = "All",
+    slope=c(0.116,0.153,0.291),
+    Intercept=c(2.954,-0.557,-2.270),
+    R2=c(0.275,0.072,0.237),
+    StdErr=c(0.240,0.637,0.665),
+    NYrs=16,
+    Transform=c("Ln","Logit","Logit"),
+    Equation=c("Ln Chla","Max(F,2)/(Max(100-F,2)","Max(F,2)/(Max(100-F,2)"),
+    Description=c("","100 x Freq >20 \u03BCg L\u207B\u00B9","100 x Freq >40 \u03BCg L\u207B\u00B9")
+  ),
+  data.frame(
+    region.val = "Littoral",
+    SubRegion = "South",
+    slope=c(0.570,1.348,1.044),
+    Intercept=c(1.708,-3.410,-4.059),
+    R2=c(0.731,0.740,0.710),
+    StdErr=c(0.438,1.012,0.846),
+    NYrs=15,
+    Transform=c("Ln","Logit","Logit"),
+    Equation=c("Ln Chla","Max(F,2)/(Max(100-F,2)","Max(F,2)/(Max(100-F,2)"),
+    Description=c("","100 x Freq >20 \u03BCg L\u207B\u00B9","100 x Freq >40 \u03BCg L\u207B\u00B9")
+  ),
+  data.frame(
+    region.val = "Littoral",
+    SubRegion = "West",
+    slope=c(0.716,2.160,1.412),
+    Intercept=c(1.761,-3.417,-4.108),
+    R2=c(0.729,0.776,0.787),
+    StdErr=c(0.557,1.482,0.936),
+    NYrs=16,
+    Transform=c("Ln","Logit","Logit"),
+    Equation=c("Ln Chla","Max(F,2)/(Max(100-F,2)","Max(F,2)/(Max(100-F,2)"),
+    Description=c("","100 x Freq >20 \u03BCg L\u207B\u00B9","100 x Freq >40 \u03BCg L\u207B\u00B9")
+  )
+)
+
+walkerEq2020.table <- walkerEq2020 |>
+  flextable()|>
+  align(j=c(3:8),align="center",part="all")|>
+  width(width=c(rep(0.75,2),rep(0.5,5),0.75,2,1.5))|>
+  padding(padding=1.25,part="all")|>
+  set_header_labels(
+    region.val = "Region",
+    SubRegion = "Sub-Region",
+    slope = "Slope",
+    R2 = "R\u00B2",
+    StdErr = "Std Error",
+    NYrs = "Years"
+    )|>
+  hline(i=c(3,6))|>
+  footnote(j="Description",value=as_paragraph("X Variable = Mean (Daily Stage - 11.5 Ft), Constrained to Maximum Value of 0 Ft, May - August (including unsampled days)"),ref_symbols =c(" "),part="header")|>
+  footnote(j="Description",value=as_paragraph("Y Variable = Ln (May - August Mean Chlorophyll-a, \u03BCg L\u207B\u00B9)"),ref_symbols =c(" "),part="header")|>
+  footnote(j="Description",value=as_paragraph("Period of Record = (CY) 1999 - 2019, excluding years impacted by hurricanes (2005 - 2007,2017 - 2018)"),ref_symbols =c(" "),part="header")|>
+  footnote(j="Description",value=as_paragraph("Number of Years = 16 for Pelagic & Littoral West, 15 for Littoral South"),ref_symbols =c(" "),part="header")|>
+  footnote(j="Description",value=as_paragraph("Frequency variables reflect combined risk of exceeding 20 \u03BCg L\u207B\u00B9 or 40 \u03BCg L\u207B\u00B9 bloom criteria across all sampling sites and dates."),ref_symbols =c(" "),part="header")|>
+  autofit()
+# |>set_caption("Regression equation for mean summer chlorophyll-a and bloom frequenceis as reported by Walker (2020)")
+
+
+```
+
+# Introduction
+
+This interactive tool provides an intereactive tool to evaluate model predctions presented by Julian et al. (*In Prep*). In this application, three modeling approaches are presented.
+
+1. Models originally developed my Walker (2020) as part of the Lake Okeechobee System Operating Manual (LOSOM) planning effort.
+    - Parameters predicted: Chlorophyll-a and Bloom Frequency (20 and 40 $\mu g\space L^{-1}$)
+    - Chlorophyll-a expressed as concentration and bloom frequency expressed as a percentage (0 - 100)
+
+```{r}
+#| label: walker2020-Eq
+#| tbl-cap: Regression equation for mean summer chlorophyll-a and bloom frequenceis as reported by Walker (2020)
+#| tbl-cap-location: top
+walkerEq2020.table
+```
+
+2. Linear mixed models presented in Julian et al. (_In Prep_)
+    - Parameters predicted: Chlorophyll-a and Bloom Frequency (20 and 40 $\mu g\space L^{-1}$)
+    - Chlorophyll-a expressed as concentration and bloom frequency expressed as a proportion (0.0 - 1.0)
+3. Lake Okeechobee Hydrodynamic and Biogeochemical chlorophyll hierarchal additive zonal model (LOK HABAM) presented in Julian et al. (_In Prep_)
+    - Parameters predicted: Chlorophyll-a, Total Phosphorus and Dissolved Inorganic Nitrogen
+    - Chlorophyll-a, Total Phosphorus and Dissolved Inorganic Nitrogen expressed as concentration
+
+The linear mixed models (#2 above) and LOK HABAM (#3 above) were fit using Generalize Additive Models (GAMs) therefore sharing a simple equation for future use in other code/object-oriented programs or spreadsheet-based platforms is not feasible. Therefore this application was developed to extend the functionality of the models presented here.
+
+#### References
+
+Julian P, Walker WW, Surratt D, Davis S (_In Prep_) Planning  for the future, algae bloom dynamics in water management and ecosystem restoration planning efforts. 
+
+Walker WW (2020) DRAFT - Chlorophyll-a Models for LOSOM Applications. Department of Interior
+
+
 ## LOSOM and LOCAR 
 
 This interactive section allows the user to explore the existing predictions of existing models (explained above) for the water management and restoration scenarios presented in Julian et al. (_In Prep_). 
@@ -153,7 +249,7 @@ mod.params <- rbind(
 
 # selectInput("Alt",
 #             label="Choose Alternative:",
-#             choices=alt.vals,
+#             choi,ces=alt.vals,
 #             multiple = TRUE,
 #             selectize = TRUE)
 checkboxGroupInput("Alt","Choose Alternative:",
@@ -195,7 +291,7 @@ radioButtons("sumstat","Summary Statistic:",
              choiceValues = c("mean","median","min","max","sd"),
              inline=T)
 br()
-(shiny::downloadButton("downloadData","Download"))
+(shiny::downloadButton("downloadData","Download Results"))
 
 ```
 
@@ -214,16 +310,97 @@ tableOutput('data')
 
 :::
 
-## Input data
+## User Input Data
 
-Here is where you can input your own data as long as the input files has the following columns...
+There are several options for users to input data.
+
+::: {.panel-tabset}
+### 1. User input
 
 ```{r}
-fileInput("file1", "Choose CSV File", accept = ".csv")
+fixedRow(
+  column(2, numericInput("InflowQ", "Inflow Q (m\u00B3)", value = NULL, min = 0)),
+  column(2, numericInput("OutflowQ", "Outflow Q (m\u00B3)", value = NULL, min = 0)),
+  column(2, numericInput("meanV", "Mean Volume (km\u00B3)", value = NULL, min = 0)),
+  column(2, numericInput("WRT", "WRT (yr\u207B\u00B9)", value = NULL, min = 0)),
+  column(2, numericInput("meanZ", "Mean Depth (m)", value = NULL, min = 0)),
+  column(2, numericInput("mean_delt", "Mean min Stage (m)", value = NULL, min = 0))
+)
+# actionButton("save", "Save Data")
+# tableOutput("output_df")
+```
+
+<br>
+
+### 2. Copy and paste 
+
+Copy and paste comma delimited data into the box below. Here is an example string to include: `169961379, 247313284, 4.13, 1.39, 2.51, 2.43`
+  
+```{r}
+textAreaInput("text_input", "Paste Data (comma-separated)", 
+               placeholder = "Inflow.Q.m3, Outflow.Q.m3, mean.vol.km3, WRT.yr, mean.depth.m, mean.delta.min",
+              width = '100%',
+              height = '20%')
+# actionButton("convert", "Convert to DataFrame")
+# tableOutput("output_df_csv")
 
 ```
 
-_WORK IN PROGRESS_
+<br>
+
+### 3. Upload 
+
+Upload a `.csv` file. If you are going to upload a csv it must contain the following column header: `Inflow.Q.m3`,`Outflow.Q.m3`,`mean.vol.km3`,`WRT.yr`,`mean.depth.m`,and `mean.delta.min`. If this header is not identical then the tool will not work. 
+
+Here is an example file: 
+
+```{r}
+ex.data <-read.csv(paste0(data.path,"Algae_Shiny_ExampleData.csv"))
+
+(shiny::downloadLink("downloadEx","Download Example CSV"))
+```
+
+```{r}
+fileInput("file1", "Choose CSV File", accept = ".csv")
+# tableOutput("output_df_csv")
+```
+
+:::
+
+***
+
+```{r}
+# actionButton("check", "Check Data Source & Run Process")
+verbatimTextOutput("source")
+```
+
+Input data preview: 
+```{r}
+tableOutput("df_table")
+```
+
+<br>
+**What model(s) would you like to get predictions from?**
+
+```{r}
+radioButtons("User_Model","Choose Model:",
+             choiceNames = c("Walker (2020)", "LMM","LOK HABAM"),
+             choiceValues = c("Walker","LMM","HABAM"),
+             inline = T)
+```
+
+<br>
+
+Preview of output data:
+```{r}
+tableOutput("user_results")
+```
+
+```{r}
+br()
+
+(shiny::downloadButton("downloadResults","Download Results"))
+```
 
 ***
 
@@ -371,9 +548,260 @@ output$downloadData <- downloadHandler(
       paste(format(Sys.Date(),"%Y%m%d"),"PredictionData",input$Model,  ".csv", sep="_")
     },
     content = function(file) {
+      dat <- dataset()
       write.csv(dat, file,row.names = F)
     }
   )
+output$downloadEx <- downloadHandler(
+    filename = "ExampleData.csv",
+    content = function(file) {
+      write.csv(ex.data, file,row.names = F)
+    }
+  )
+
+## User input data
+
+# Function to detect which input has data
+get_active_input <- function(input) {
+  if (!is.null(input$file) && !is.null(input$file)) {
+    return("File Upload")  # File input has data
+  } else if (!is.null(input$text) && nzchar(input$text)) {
+    return("Copy Paste")  # Text area has data
+  } else if (!is.null(input$fixed) && any(nzchar(unlist(input$fixed)))) {
+    return("User Input")  # Fixed row inputs have data
+  } else {
+    return(NULL)  # No data found
+  }
+}
+
+# Reactive expression to determine the data source
+active_source <- reactive({
+  get_active_input(list(
+    file = input$file1,
+    text = input$text_input,
+    fixed = list(input$InflowQ, input$OutflowQ,
+                 input$meanV,input$WRT,
+                 input$meanZ,input$mean_delt)
+  ))
+})
+
+# Reactive expression to automatically load data
+data_df <- reactive({
+  source <- active_source()
+  
+  if (is.null(source)) return(NULL)
+  if(source == "File Upload"){
+    df <- read.csv(input$file1$datapath,header = TRUE)
+    return(df)
+    
+  } else if(source == "Copy Paste"){
+    df <- read.csv(text = input$text_input, stringsAsFactors = FALSE,header = F,
+                   col.names = c("Inflow.Q.m3", "Outflow.Q.m3",
+                                 "mean.vol.km3", "WRT.yr",
+                                 "mean.depth.m", "mean.delta.min"))
+    return(df)
+    
+  } else if(source == "User Input"){
+    df <- data.frame(Inflow.Q.m3 = as.numeric(input$InflowQ),
+                     Outflow.Q.m3 = as.numeric(input$OutflowQ),
+                     mean.vol.km3 = as.numeric(input$meanV),
+                     WRT.yr = as.numeric(input$WRT),
+                     mean.depth.m = as.numeric(input$meanZ),
+                     mean.delta.min =as.numeric(input$mean_delt))
+    return(df)
+    
+  } else{
+    return(NULL)
+  }
+})
+
+# Display the data source
+output$source <- renderText({
+  source <- active_source()
+  if (is.null(source)) "No data available!"
+  else paste("Using data from:", source)
+})
+
+# Display the original dataframe
+output$df_table <- renderTable({
+  # req(data_df())  # Ensure data is available
+  head(data_df())
+})
+
+# Automatically process data
+processed_data <- reactive({
+  RSM.user.dat <- data_df()
+  
+  if(input$User_Model=="Walker"){
+    user_results <- rbind(
+      cbind(RSM.user.dat,data.frame(EcoZone = "Pelagic",
+                                    Chla = exp(2.954+RSM.user.dat$mean.delta.min*0.116),
+                                    logit.f20 = (-0.557+RSM.user.dat$mean.delta.min*0.153),
+                                    logit.f40 = (-2.270+RSM.user.dat$mean.delta.min*0.291))),
+      cbind(RSM.user.dat,data.frame(EcoZone = "Littoral_South",
+                                    Chla = exp(1.708+RSM.user.dat$mean.delta.min*0.570),
+                                    logit.f20 = (-3.410+RSM.user.dat$mean.delta.min*1.348),
+                                    logit.f40 = (-4.059+RSM.user.dat$mean.delta.min*1.044))),
+      cbind(RSM.user.dat,data.frame(EcoZone = "Littoral_West",
+                                    Chla = exp(1.761+RSM.user.dat$mean.delta.min*0.716),
+                                    logit.f20 = (-3.417+RSM.user.dat$mean.delta.min*2.160),
+                                    logit.f40 = (-4.108+RSM.user.dat$mean.delta.min*1.412)))
+    )|>
+      mutate(
+        f20 = inv_logit.ww(logit.f20),
+        f40 = inv_logit.ww(logit.f40)
+      )
+    user_results <- user_results[,!names(user_results)%in%c("logit.f20","logit.f40")]
+    user_results$EcoZone <- sentence_case_multiple(user_results$EcoZone)
+    return(user_results)
+    
+  } else if(input$User_Model=="LMM"){
+    RSM.user.dat <- merge(
+      RSM.user.dat,
+      data.frame(EcoZone3.f = as.factor(c("Littoral_North", "Littoral_South", "Littoral_West", "nearshore", "pelagic"))),
+      all=T)
+    
+    user_results <- RSM.user.dat|>
+      mutate(
+        Chla = predict(mod_site.seamean1.stg,newdata = RSM.user.dat,type="response"),
+        f20  = predict(mod_site.sea.f20,newdata = RSM.user.dat,type="response"),
+        f40  = predict(mod_site.sea.f40,newdata = RSM.user.dat,type="response"),
+        Chla.fxf = predict(mod_site.seamean1.stg,newdata = RSM.user.dat,type="response",
+                           exclude=c("s(EcoZone3.f)", "s(EcoZone3.f,mean.delta.min)")),
+        f20.fxf = predict(mod_site.sea.f20,newdata = RSM.user.dat,type="response",
+                          exclude=c("s(EcoZone3.f)", "s(EcoZone3.f,mean.delta.min)")),
+        f40.fxf = predict(mod_site.sea.f40,newdata = RSM.user.dat,type="response",
+                          exclude=c("s(EcoZone3.f)", "s(EcoZone3.f,mean.delta.min)"))
+      )
+    
+    dat.colnames <- names(user_results)
+    dat.colnames[dat.colnames=="EcoZone3.f"] <- "EcoZone"
+    colnames(user_results) <- dat.colnames
+    user_results$EcoZone <- sentence_case_multiple(user_results$EcoZone)
+    return(user_results)
+    
+  } else if(input$User_Model=="HABAM"){
+    
+    user_results <- merge(
+      RSM.user.dat,
+      data.frame(EcoZone3.f = as.factor(c("Littoral_North", "Littoral_South", "Littoral_West", "nearshore", "pelagic"))),
+      all=T)
+    
+    user_results$TP <- predict(TP_HGAM_mod_sum2,newdata=user_results,type="response",se.fit=T)$fit|>as.numeric()
+    user_results$DIN <- predict(DIN_HGAM_mod_sum2,newdata=user_results,type="response",se.fit=T)$fit|>as.numeric()
+    user_results$Chla <- predict(Chla_HGAM_mod_sum3,newdata=user_results,type="response",se.fit=T)$fit|>as.numeric()
+    
+    dat.colnames <- names(user_results)
+    dat.colnames[dat.colnames=="EcoZone3.f"] <- "EcoZone"
+    colnames(user_results) <- dat.colnames
+    user_results$EcoZone <- sentence_case_multiple(user_results$EcoZone)
+    return(user_results)
+    
+  } else { NULL }
+})
+
+# Display processed dataframe
+output$user_results <- renderTable({
+  head(processed_data())
+})
+
+output$downloadResults <- downloadHandler(
+    filename = function() {
+      paste(format(Sys.Date(),"%Y%m%d"),"Results",input$User_Model,  ".csv", sep="_")
+    },
+    content = function(file) {
+      user_results <- processed_data()
+      write.csv(user_results, file,row.names = F)
+    }
+  )
+# get_active_input <- function(input) {
+#   if (!is.null(input$file) && nrow(input$file) > 0) {
+#     return("File Upload")  # File input has data
+#   } else if (!is.null(input$text) && nzchar(input$text)) {
+#     return("Copy Paste")  # Text area has data
+#   } else if (!is.null(input$fixed) && any(nzchar(unlist(input$fixed)))) {
+#     return("User Input")  # Fixed row inputs have data
+#   } else {
+#     return(NULL)  # No data found
+#   }
+# }
+# 
+# rv <- reactiveValues(data = NULL)
+# observeEvent(input$check, {
+#   active_source <- get_active_input(list(
+#     file = input$file1,
+#     text = input$text_input,
+#     fixed = list(input$Inflow.Q.m3, input$Outflow.Q.m3,
+#                  input$mean.vol.km3,input$WRT.yr,
+#                  input$mean.depth.m,input$mean.delta.min)
+#   ))
+#   
+#   output$source <- renderText({
+#     if (is.null(active_source)) {
+#       "No data available!"
+#     } else {
+#       paste("Using data from:", active_source)
+#     }
+#   })
+#   
+#    # Store the dataframe in reactiveValues
+#    if(active_source == "File Upload"){
+#     req(input$file1$datapath)
+#      rv$data <- read.csv(input$file1$datapath)
+#     } else if(active_source == "Copy Paste"){
+#       rv$data <- read.csv(text = input$text_input, stringsAsFactors = FALSE,header = F,
+#                           col.names = c("Inflow.Q.m3", "Outflow.Q.m3",
+#                                         "mean.vol.km3", "WRT.yr", 
+#                                         "mean.depth.m", "mean.delta.min"))
+#     } else if(active_source == "User Input"){
+#       rv$data <- data.frame(Inflow.Q.m3 = as.numeric(input$Inflow.Q.m3),
+#                    Outflow.Q.m3 = as.numeric(input$Outflow.Q.m3),
+#                    mean.vol.km3 = as.numeric(input$mean.vol.km3),
+#                    WRT.yr = as.numeric(input$WRT.yr),
+#                    mean.depth.m = as.numeric(input$mean.depth.m),
+#                    mean.delta.min =as.numeric(input$mean.delta.min))
+#     }
+#   
+#   # Display the raw dataframe
+#     output$df_table <- renderTable({
+#       req(rv$data)
+#       rv$data
+#     })
+# })
+# 
+# observeEvent(input$User_Model, {
+#   RSM.user.dat <- rv$data
+#   
+#   if(input$User_Model=="Walker"){
+#     rslt <- rbind(
+#       cbind(RSM.user.dat,data.frame(EcoZone = "Pelagic", 
+#                                 Chla = exp(2.954+RSM.user.dat$mean.delta.min*0.116),
+#                                 logit.f20 = (-0.557+RSM.user.dat$mean.delta.min*0.153),
+#                                 logit.f40 = (-2.270+RSM.user.dat$mean.delta.min*0.291))),
+#       cbind(RSM.user.dat,data.frame(EcoZone = "Littoral_South", 
+#                                 Chla = exp(1.708+RSM.user.dat$mean.delta.min*0.570),
+#                                 logit.f20 = (-3.410+RSM.user.dat$mean.delta.min*1.348),
+#                                 logit.f40 = (-4.059+RSM.user.dat$mean.delta.min*1.044))),
+#       cbind(RSM.user.dat,data.frame(EcoZone = "Littoral_West", 
+#                                 Chla = exp(1.761+RSM.user.dat$mean.delta.min*0.716),
+#                                 logit.f20 = (-3.417+RSM.user.dat$mean.delta.min*2.160),
+#                                 logit.f40 = (-4.108+RSM.user.dat$mean.delta.min*1.412)))
+#     )|>
+#       mutate(
+#         f20 = inv_logit.ww(logit.f20),
+#         f40 = inv_logit.ww(logit.f40)
+#       )
+#     rv$rslt <- rslt  # Store processed dataframe
+#   }
+#   
+#   output$user_results <- renderTable({
+#      rv$rslt
+#   })
+#   
+# })
+#  
+
+
 ```
 
 
