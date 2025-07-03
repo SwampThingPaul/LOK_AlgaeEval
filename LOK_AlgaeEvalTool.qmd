@@ -206,7 +206,7 @@ walkerEq2020.table <- walkerEq2020 |>
 
 # Introduction
 
-This interactive tool provides an intereactive tool to evaluate model predctions presented by Julian et al. (*In Prep*). In this application, three modeling approaches are presented.
+This interactive tool provides an intereactive tool to evaluate model predctions presented by Julian et al. (2025). In this application, three modeling approaches are presented.
 
 1. Models originally developed my Walker (2020) as part of the Lake Okeechobee System Operating Manual (LOSOM) planning effort.
     - Parameters predicted: Chlorophyll-a and Bloom Frequency (20 and 40 $\mu g\space L^{-1}$)
@@ -230,14 +230,14 @@ The linear mixed models (#2 above) and LOK HABAM (#3 above) were fit using Gener
 
 #### References
 
-Julian P, Walker WW, Surratt D, Davis S (_In Prep_) Planning  for the future, algae bloom dynamics in water management and ecosystem restoration planning efforts. 
+Julian P, Walker BW, Surratt D, Davis SE (2025) Planning for the future, algae bloom dynamics in water management and ecosystem restoration efforts. Frontiers in Water. doi: 10.3389/frwa.2025.1619838
 
 Walker WW (2020) DRAFT - Chlorophyll-a Models for LOSOM Applications. Department of Interior
 
 
 ## LOSOM and LOCAR 
 
-This interactive section allows the user to explore the existing predictions of existing models (explained above) for the water management and restoration scenarios presented in Julian et al. (_In Prep_). 
+This interactive section allows the user to explore the existing predictions of existing models (explained above) for the water management and restoration scenarios presented in Julian et al. (2025). 
 <br>
 
 ```{r}
