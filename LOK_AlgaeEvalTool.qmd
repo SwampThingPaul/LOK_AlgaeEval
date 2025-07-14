@@ -138,6 +138,17 @@ LOK.RSM.HABAM.melt<- melt(LOK.RSM.HABAM[,vars],id.vars =vars[1:3])
 
 ```
 
+```{r shiny errors, include = F}
+shinyOptions(shiny.error = function() {
+  showModal(modalDialog(
+    title = "Custom Error",
+    "Something went wrong. Please try again later or contact support at support@example.com.",
+    easyClose = TRUE,
+    footer = NULL
+  ))
+})
+
+```
 
 ```{r walkers eq}
 walkerEq2020 <- rbind(
@@ -206,7 +217,7 @@ walkerEq2020.table <- walkerEq2020 |>
 
 # Introduction
 
-This interactive tool provides an intereactive tool to evaluate model predctions presented by Julian et al. (2025). In this application, three modeling approaches are presented.
+This interactive tool allows users to evaluate model predictions presented by Julian et al. (2025). The application features three different modeling approaches.
 
 1. Models originally developed my Walker (2020) as part of the Lake Okeechobee System Operating Manual (LOSOM) planning effort.
     - Parameters predicted: Chlorophyll-a and Bloom Frequency (20 and 40 $\mu g\space L^{-1}$)
@@ -219,18 +230,18 @@ This interactive tool provides an intereactive tool to evaluate model predctions
 walkerEq2020.table
 ```
 
-2. Linear mixed models presented in Julian et al. (_In Prep_)
+2. Linear mixed models presented in Julian et al. (2025)
     - Parameters predicted: Chlorophyll-a and Bloom Frequency (20 and 40 $\mu g\space L^{-1}$)
     - Chlorophyll-a expressed as concentration and bloom frequency expressed as a proportion (0.0 - 1.0)
-3. Lake Okeechobee Hydrodynamic and Biogeochemical chlorophyll hierarchal additive zonal model (LOK HABAM) presented in Julian et al. (_In Prep_)
+3. Lake Okeechobee Hydrodynamic and Biogeochemical chlorophyll hierarchical additive zonal model (LOK HABAM) presented in Julian et al. (2025)
     - Parameters predicted: Chlorophyll-a, Total Phosphorus and Dissolved Inorganic Nitrogen
     - Chlorophyll-a, Total Phosphorus and Dissolved Inorganic Nitrogen expressed as concentration
 
-The linear mixed models (#2 above) and LOK HABAM (#3 above) were fit using Generalize Additive Models (GAMs) therefore sharing a simple equation for future use in other code/object-oriented programs or spreadsheet-based platforms is not feasible. Therefore this application was developed to extend the functionality of the models presented here.
+The linear mixed models (#2 above) and LOK HABAM (#3 above) were fit using Generalized Additive Models (GAMs). As a result, sharing a simple equation for use in other code, object-oriented programs, or spreadsheet-based platforms is not feasible. This application was therefore developed to extend the functionality of the models presented here.
 
 #### References
 
-Julian P, Walker BW, Surratt D, Davis SE (2025) Planning for the future, algae bloom dynamics in water management and ecosystem restoration efforts. Frontiers in Water. doi: 10.3389/frwa.2025.1619838
+Julian P, Walker BW, Surratt D, Davis SE (2025) Planning for the future, algae bloom dynamics in water management and ecosystem restoration efforts. Frontiers in Water. Volume 7. doi: [10.3389/frwa.2025.1619838](https://doi.org/10.3389/frwa.2025.1619838)
 
 Walker WW (2020) DRAFT - Chlorophyll-a Models for LOSOM Applications. Department of Interior
 
@@ -247,34 +258,17 @@ mod.params <- rbind(
   data.frame(model = "LOK HABAM",params =c("Chla","TP","DIN"))
 )
 
-# selectInput("Alt",
-#             label="Choose Alternative:",
-#             choi,ces=alt.vals,
-#             multiple = TRUE,
-#             selectize = TRUE)
 checkboxGroupInput("Alt","Choose Alternative:",
              choiceNames = alt.vals,
              choiceValues = alt.vals,
+             selected = alt.vals,
              inline=T)
 
 radioButtons("Model","Choose Model:",
              choiceNames = c("Walker (2020)", "LMM","LOK HABAM"),
              choiceValues = c("Walker","LMM","HABAM"),
              inline = T)
-# br()
-# selectInput("Model",
-#             label="Choose Model:",
-#             choices=c("LMM","LOK HABAM"),
-#             multiple = FALSE,
-#             selectize = TRUE)
-# br()
-# checkboxGroupInput("param", "Parameter:",
-#                    c("Chlorophyll-a" = "Chla",
-#                      "Bloom Frequency (20 \u03BCg L\207B\u00B9)" = "f20",
-#                      "Bloom Frequency (40 \u03BCg/L)" = "f40",
-#                      "Total Phosphorus" = "TP",
-#                      "Dissolved Inorganic Nitrogen" = "DIN"))
-#br() 
+
 params <- data.frame(
   param.names = c("Chlorophyll-a","Bloom Frequency (20 \u03BCg L\u207B\u00B9)",
                  "Bloom Frequency (40 \u03BCg L\u207B\u00B9)","Total Phosphorus",
@@ -282,6 +276,7 @@ params <- data.frame(
   param.vals = c("Chla","f20","f40","TP","DIN")
 )
 params$param.vals.f <- factor(params$param.vals,levels = c("Chla","f20","f40","TP","DIN"))
+
 radioButtons("param","Parameter:",
              choiceNames = params$param.names,
              choiceValues = params$param.vals)
@@ -439,9 +434,18 @@ output$distPlot <- renderPlot({
   
   alt.cols.s <- alt.cols[alt.vals.f[alt.vals%in%input$Alt]]
   
+  validate(
+    need(input$Model %in% c("Walker","LMM","HABAM"), "Please select a Model to display results."),
+    need(input$Alt %in% alt.vals, "Please select one or more alteratives.")
+  )
+  
   if(input$Model=="Walker"){
     # dat <- subset(LOK.RSM.Walker.melt,Alt%in%input$Alt&variable==input$param)
     dat <- dataset();# 
+    
+    validate(
+      need(input$param %in% c("Chla","f20","f40"), "Please select a parameter (not all models have the same parameters, see above).")
+    )
     
     lab.val <- labs[params$param.vals.f%in%input$param]
     
@@ -468,6 +472,10 @@ output$distPlot <- renderPlot({
     dat.fixed <- aggregate(value~WY+Alt,subset(dat,type=="fix.eff"),mean)|>
       mutate(EcoZone3.f = "Entire Lake")
     
+    validate(
+      need(input$param %in% c("Chla","f20","f40"), "Please select a parameter (not all models have the same parameters, see above).")
+    )
+    
     lab.val <- labs[params$param.vals.f%in%input$param]
     
     p1 <- ggplot(dat.fixed,aes(x=Alt,y=value))+
@@ -489,6 +497,10 @@ output$distPlot <- renderPlot({
   } else if(input$Model=="HABAM"){
     # dat <- subset(LOK.RSM.HABAM.melt,Alt%in%input$Alt&variable==input$param)
     dat <- dataset() 
+    
+    validate(
+      need(input$param %in% c("Chla","TP","DIN"), "Please select a parameter (not all models have the same parameters, see above).")
+    )
     
     lab.val <- labs[params$param.vals.f%in%input$param]
     
